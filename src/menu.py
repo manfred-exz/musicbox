@@ -23,15 +23,17 @@ from ui import Ui
 from const import Constant
 import logger
 
+# expand the path of home-folder to full-length path
 home = os.path.expanduser("~")
+# if the config directory doesn't exists, then create a new one
 if os.path.isdir(Constant.conf_dir) is False:
     os.mkdir(Constant.conf_dir)
 
 locale.setlocale(locale.LC_ALL, "")
-code = locale.getpreferredencoding()   
+code = locale.getpreferredencoding()
 
 # carousel x in [left, right]
-carousel = lambda left, right, x: left if (x>right) else (right if x<left else x)
+carousel = lambda left, right, x: left if (x > right) else (right if x < left else x)
 
 shortcut = [
     ['j', 'Down      ', '下移'],
@@ -61,198 +63,220 @@ class Menu:
     def __init__(self):
         reload(sys)
         sys.setdefaultencoding('UTF-8')
-        self.datatype = 'main'
+        self.data_type = 'main'
+        # Title of the application
         self.title = '网易云音乐'
-        self.datalist = ['排行榜', '艺术家', '新碟上架', '精选歌单', '我的歌单', 'DJ节目', '打碟', '收藏', '搜索', '帮助']
-        self.offset = 0
-        self.index = 0
-        self.presentsongs = []
+        # Main-menu list
+        self.data_list = ['排行榜', '艺术家', '新碟上架', '精选歌单', '我的歌单', 'DJ节目', '打碟', '收藏', '搜索', '帮助']
+        # Which page of the data_list is displayed (data_list may be displayed in multiple pages
+        self.page_index = 0
+        # The index of the current selected line
+        self.current_line_index = 0
+        self.present_songs = []
         self.player = Player()
         self.ui = Ui()
         self.netease = NetEase()
         self.screen = curses.initscr()
         self.screen.keypad(1)
-        self.step = 10
+        self.page_size = 10  # The number of lines that can be displayed on one page.
         self.stack = []
-        self.djstack = []
-        self.userid = None
-        self.username = None
+        self.dj_stack = []
+        self.user_id = None
+        self.user_name = None
+
+        # Read in the collection and account in flavor.json
         try:
-            sfile = file(Constant.conf_dir + "/flavor.json",'r')
-            data = json.loads(sfile.read())
+            config_file = file(Constant.conf_dir + "/flavor.json", 'r')
+            data = json.loads(config_file.read())
             self.collection = data['collection']
             self.account = data['account']
-            sfile.close()
+            config_file.close()
         except:
-            self.collection = []        
+            self.collection = []
             self.account = {}
 
     def start(self):
-        self.ui.build_menu(self.datatype, self.title, self.datalist, self.offset, self.index, self.step)
-        self.stack.append([self.datatype, self.title, self.datalist, self.offset, self.index])
+        # draw the main menu
+        self.ui.build_menu(self.data_type, self.title, self.data_list, self.page_index, self.current_line_index, self.page_size)
+        # push current menu into stack
+        self.stack.append([self.data_type, self.title, self.data_list, self.page_index, self.current_line_index])
+
+        # Main loop
         while True:
-            datatype = self.datatype
+            # refresh the menu
+            data_type = self.data_type
             title = self.title
-            datalist = self.datalist
-            offset = self.offset
-            idx = index = self.index
-            step = self.step
+            data_list = self.data_list
+            page_index = self.page_index
+            idx = current_line_index = self.current_line_index
+            page_size = self.page_size
             stack = self.stack
-            djstack = self.djstack
-            key = self.screen.getch()
+            dj_stack = self.dj_stack
             self.ui.screen.refresh()
 
-            # 退出
+
+
+
+            # fetch a user's command
+            key = self.screen.getch()
+            # quit
             if key == ord('q'):
                 break
 
-            # 上移
-            elif key == ord('k'):
-                self.index = carousel(offset, min( len(datalist), offset + step) - 1, idx-1 )
+            # move up
+            elif key == ord('k') or key == curses.KEY_UP:
+                self.current_line_index = carousel(page_index, min(len(data_list), page_index + page_size) - 1, idx - 1)
+                # DEBUG
+                # self.ui.screen.addstr(0, 0,'current_line_index: {}, begin: {}, end: {}'.format(self.current_line_index, page_index, min(len(data_list), page_index+page_size)))
 
-            # 下移
-            elif key == ord('j'):
-                self.index = carousel(offset, min( len(datalist), offset + step) - 1, idx+1 )
+            # move down
+            elif key == ord('j') or key == curses.KEY_DOWN:
+                self.current_line_index = carousel(page_index, min(len(data_list), page_index + page_size) - 1, idx + 1)
+                # DEBUG
+                # self.ui.screen.addstr(0, 0,'current_line_index: {}, begin: {}, end: {}'.format(self.current_line_index, page_index, min(len(data_list), page_index+page_size)))
 
-            # 数字快捷键
+            # number shortcut
             elif ord('0') <= key <= ord('9'):
-                if self.datatype == 'songs' or self.datatype == 'djchannels' or self.datatype == 'help':
+                if self.data_type == 'songs' or self.data_type == 'djchannels' or self.data_type == 'help':
                     continue
                 idx = key - ord('0')
-                self.ui.build_menu(self.datatype, self.title, self.datalist, self.offset, idx, self.step)
+                self.ui.build_menu(self.data_type, self.title, self.data_list, self.page_index, idx, self.page_size)
                 self.ui.build_loading()
                 self.dispatch_enter(idx)
-                self.index = 0
-                self.offset = 0    
+                self.current_line_index = 0
+                self.page_index = 0
 
-            # 向上翻页
-            elif key == ord('u'):
-                if offset == 0:
+                # 向上翻页
+            elif key == ord('u') or key == curses.KEY_PPAGE:
+                if page_index == 0:
                     continue
-                self.offset -= step
+                self.page_index -= page_size
 
-                # e.g. 23 - 10 = 13 --> 10
-                self.index = (index-step)//step*step
+                # Move to first line of the page
+                self.current_line_index = (current_line_index - page_size) // page_size * page_size
 
             # 向下翻页
-            elif key == ord('d'):
-                if offset + step >= len( datalist ):
+            elif key == ord('d') or key == curses.KEY_NPAGE:
+                if page_index + page_size >= len(data_list):
                     continue
-                self.offset += step
+                self.page_index += page_size
 
-                # e.g. 23 + 10 = 33 --> 30
-                self.index = (index+step)//step*step
+                # Move to first line of the page
+                self.current_line_index = (current_line_index + page_size) // page_size * page_size
 
             # 前进
-            elif key == ord('l') or key == 10:
-                if self.datatype == 'songs' or self.datatype == 'djchannels' or self.datatype == 'help':
+            elif key == ord('l') or key == 10 or key == curses.KEY_RIGHT:
+                if self.data_type == 'songs' or self.data_type == 'djchannels' or self.data_type == 'help':
                     continue
                 self.ui.build_loading()
                 self.dispatch_enter(idx)
-                self.index = 0
-                self.offset = 0    
+                self.current_line_index = 0
+                self.page_index = 0
 
-            # 回退
-            elif key == ord('h'):
+                # 回退
+            elif key == ord('h') or key == curses.KEY_LEFT:
                 # if not main menu
                 if len(self.stack) == 1:
                     continue
-                up = stack.pop()
-                self.datatype = up[0]
-                self.title = up[1]
-                self.datalist = up[2]
-                self.offset = up[3]
-                self.index = up[4]
+                last_menu = stack.pop()
+                self.data_type = last_menu[0]
+                self.title = last_menu[1]
+                self.data_list = last_menu[2]
+                self.page_index = last_menu[3]
+                self.current_line_index = last_menu[4]
 
             # 搜索
             elif key == ord('f'):
                 self.search()
 
             # 播放下一曲
-            elif key == ord(']'):
-                if len(self.presentsongs) == 0:
+            elif key == ord(']') or key == curses.KEY_NEXT:
+                if len(self.present_songs) == 0:
                     continue
                 self.player.next()
                 time.sleep(0.1)
 
             # 播放上一曲
-            elif key == ord('['):
-                if len(self.presentsongs) == 0:
-                    continue 
+            elif key == ord('[') or key == curses.KEY_PREVIOUS:
+                if len(self.present_songs) == 0:
+                    continue
                 self.player.prev()
                 time.sleep(0.1)
 
             # 播放、暂停
             elif key == ord(' '):
-                if datatype == 'songs':
-                    self.presentsongs = ['songs', title, datalist, offset, index]
-                elif datatype == 'djchannels':
-                    self.presentsongs = ['djchannels', title, datalist, offset, index]
-                self.player.play(datatype, datalist, idx)
+                if data_type == 'songs':
+                    self.present_songs = ['songs', title, data_list, page_index, current_line_index]
+                elif data_type == 'djchannels':
+                    self.present_songs = ['djchannels', title, data_list, page_index, current_line_index]
+                self.player.play(data_type, data_list, idx)
                 time.sleep(0.1)
 
             # 加载当前播放列表
             elif key == ord('p'):
-                if len(self.presentsongs) == 0:
+                if len(self.present_songs) == 0:
                     continue
-                self.stack.append( [datatype, title, datalist, offset, index] )
-                self.datatype = self.presentsongs[0]
-                self.title = self.presentsongs[1]
-                self.datalist = self.presentsongs[2]
-                self.offset = self.presentsongs[3]
-                self.index = self.presentsongs[4]
+                self.stack.append([data_type, title, data_list, page_index, current_line_index])
+                self.data_type = self.present_songs[0]
+                self.title = self.present_songs[1]
+                self.data_list = self.present_songs[2]
+                self.page_index = self.present_songs[3]
+                self.current_line_index = self.present_songs[4]
 
             # 添加到打碟歌单
             elif key == ord('a'):
-                if datatype == 'songs' and len(datalist) != 0:
-                    self.djstack.append( datalist[idx] )
-                elif datatype == 'artists':
+                if data_type == 'songs' and len(data_list) != 0:
+                    self.dj_stack.append(data_list[idx])
+                elif data_type == 'artists':
                     pass
 
             # 加载打碟歌单
             elif key == ord('z'):
-                self.stack.append( [datatype, title, datalist, offset, index] )
-                self.datatype = 'songs'
+                self.stack.append([data_type, title, data_list, page_index, current_line_index])
+                self.data_type = 'songs'
                 self.title = '网易云音乐 > 打碟'
-                self.datalist = self.djstack
-                self.offset = 0
-                self.index = 0
+                self.data_list = self.dj_stack
+                self.page_index = 0
+                self.current_line_index = 0
 
             # 添加到收藏歌曲
             elif key == ord('s'):
-                if (datatype == 'songs' or datatype == 'djchannels') and len(datalist) != 0:
-                    self.collection.append( datalist[idx] )
+                if (data_type == 'songs' or data_type == 'djchannels') and len(data_list) != 0:
+                    self.collection.append(data_list[idx])
 
             # 加载收藏歌曲
             elif key == ord('c'):
-                self.stack.append( [datatype, title, datalist, offset, index] )
-                self.datatype = 'songs'
+                self.stack.append([data_type, title, data_list, page_index, current_line_index])
+                self.data_type = 'songs'
                 self.title = '网易云音乐 > 收藏'
-                self.datalist = self.collection
-                self.offset = 0
-                self.index = 0
+                self.data_list = self.collection
+                self.page_index = 0
+                self.current_line_index = 0
 
             # 从当前列表移除
             elif key == ord('r'):
-                if datatype != 'main' and len(datalist) != 0:
-                    self.datalist.pop(idx)
-                    self.index = carousel(offset, min( len(datalist), offset + step) - 1, idx )
+                if data_type != 'main' and len(data_list) != 0:
+                    self.data_list.pop(idx)
+                    self.current_line_index = carousel(page_index, min(len(data_list), page_index + page_size) - 1, idx)
 
             elif key == ord('m'):
-                if datatype != 'main':
-                    self.stack.append( [datatype, title, datalist, offset, index] )
-                    self.datatype = self.stack[0][0]
+                if data_type != 'main':
+                    self.stack.append([data_type, title, data_list, page_index, current_line_index])
+                    self.data_type = self.stack[0][0]
                     self.title = self.stack[0][1]
-                    self.datalist = self.stack[0][2]
-                    self.offset = 0
-                    self.index = 0                    
+                    self.data_list = self.stack[0][2]
+                    self.page_index = 0
+                    self.current_line_index = 0
 
             elif key == ord('g'):
-                if datatype == 'help':
+                if data_type == 'help':
                     webbrowser.open_new_tab('https://github.com/darknessomi/musicbox')
 
-            self.ui.build_menu(self.datatype, self.title, self.datalist, self.offset, self.index, self.step)
+            elif key == ord('\\'):
+                self.player.next_play_mode()
 
+            # refresh the window
+            self.ui.build_menu(self.data_type, self.title, self.data_list, self.page_index, self.current_line_index, self.page_size)
 
         self.player.stop()
         sfile = file(Constant.conf_dir + "/flavor.json", 'w')
@@ -267,37 +291,37 @@ class Menu:
     def dispatch_enter(self, idx):
         # The end of stack
         netease = self.netease
-        datatype = self.datatype
+        datatype = self.data_type
         title = self.title
-        datalist = self.datalist
-        offset = self.offset
-        index = self.index
-        self.stack.append( [datatype, title, datalist, offset, index])
+        datalist = self.data_list
+        offset = self.page_index
+        index = self.current_line_index
+        self.stack.append([datatype, title, datalist, offset, index])
 
         if datatype == 'main':
-            self.choice_channel(idx) 
+            self.choice_channel(idx)
 
-        # 该艺术家的热门歌曲
+            # 该艺术家的热门歌曲
         elif datatype == 'artists':
             artist_id = datalist[idx]['artist_id']
-            songs = netease.artists(artist_id)         
-            self.datatype = 'songs'
-            self.datalist = netease.dig_info(songs, 'songs')
+            songs = netease.artists(artist_id)
+            self.data_type = 'songs'
+            self.data_list = netease.dig_info(songs, 'songs')
             self.title += ' > ' + datalist[idx]['artists_name']
 
         # 该专辑包含的歌曲
         elif datatype == 'albums':
             album_id = datalist[idx]['album_id']
             songs = netease.album(album_id)
-            self.datatype = 'songs'
-            self.datalist = netease.dig_info(songs, 'songs')
+            self.data_type = 'songs'
+            self.data_list = netease.dig_info(songs, 'songs')
             self.title += ' > ' + datalist[idx]['albums_name']
 
         # 精选歌单选项
         elif datatype == 'playlists':
-            data = self.datalist[idx]
-            self.datatype = data['datatype']
-            self.datalist = netease.dig_info(data['callback'](), self.datatype)
+            data = self.data_list[idx]
+            self.data_type = data['datatype']
+            self.data_list = netease.dig_info(data['callback'](), self.data_type)
             self.title += ' > ' + data['title']
 
         # 全站置顶歌单包含的歌曲
@@ -305,26 +329,26 @@ class Menu:
             log.debug(datalist)
             playlist_id = datalist[idx]['playlist_id']
             songs = netease.playlist_detail(playlist_id)
-            self.datatype = 'songs'
-            self.datalist = netease.dig_info(songs, 'songs')
+            self.data_type = 'songs'
+            self.data_list = netease.dig_info(songs, 'songs')
             self.title += ' > ' + datalist[idx]['playlists_name']
 
         # 分类精选
         elif datatype == 'playlist_classes':
             # 分类名称
-            data = self.datalist[idx]
-            self.datatype = 'playlist_class_detail'
-            self.datalist = netease.dig_info(data, self.datatype)
+            data = self.data_list[idx]
+            self.data_type = 'playlist_class_detail'
+            self.data_list = netease.dig_info(data, self.data_type)
             self.title += ' > ' + data
-            log.debug(self.datalist)
+            log.debug(self.data_list)
 
         # 某一分类的详情
         elif datatype == 'playlist_class_detail':
             # 子类别
-            data = self.datalist[idx]
-            self.datatype = 'top_playlists'
-            self.datalist = netease.dig_info(netease.top_playlists(data), self.datatype)
-            log.debug(self.datalist)
+            data = self.data_list[idx]
+            self.data_type = 'top_playlists'
+            self.data_list = netease.dig_info(netease.top_playlists(data), self.data_type)
+            log.debug(self.data_list)
             self.title += ' > ' + data
 
     def choice_channel(self, idx):
@@ -332,27 +356,27 @@ class Menu:
         netease = self.netease
         if idx == 0:
             songs = netease.top_songlist()
-            self.datalist = netease.dig_info(songs, 'songs')
+            self.data_list = netease.dig_info(songs, 'songs')
             self.title += ' > 排行榜'
-            self.datatype = 'songs'
+            self.data_type = 'songs'
 
         # 艺术家
         elif idx == 1:
             artists = netease.top_artists()
-            self.datalist = netease.dig_info(artists, 'artists')
+            self.data_list = netease.dig_info(artists, 'artists')
             self.title += ' > 艺术家'
-            self.datatype = 'artists'
+            self.data_type = 'artists'
 
         # 新碟上架
         elif idx == 2:
             albums = netease.new_albums()
-            self.datalist = netease.dig_info(albums, 'albums')
+            self.data_list = netease.dig_info(albums, 'albums')
             self.title += ' > 新碟上架'
-            self.datatype = 'albums'
+            self.data_type = 'albums'
 
         # 精选歌单
         elif idx == 3:
-            self.datalist = [
+            self.data_list = [
                 {
                     'title': '全站置顶',
                     'datatype': 'top_playlists',
@@ -365,17 +389,20 @@ class Menu:
                 }
             ]
             self.title += ' > 精选歌单'
-            self.datatype = 'playlists'            
+            self.data_type = 'playlists'
 
         # 我的歌单
         elif idx == 4:
             # 未登录
-            if self.userid is None:
+            if self.user_id is None:
                 # 使用本地存储了账户登录
                 if self.account:
                     user_info = netease.login(self.account[0], self.account[1])
-                    
+                else:
+                    user_info = {}
+
                 # 本地没有存储账户，或本地账户失效，则引导录入
+                # if self.account == {} or user_info['code'] != 200:
                 if self.account == {} or user_info['code'] != 200:
                     data = self.ui.build_login()
                     # 取消登录
@@ -384,31 +411,32 @@ class Menu:
                     user_info = data[0]
                     self.account = data[1]
 
-                self.username = user_info['profile']['nickname']
-                self.userid = user_info['account']['id']
+                self.user_name = user_info['profile']['nickname']
+                self.user_id = user_info['account']['id']
+
             # 读取登录之后的用户歌单
-            myplaylist = netease.user_playlist( self.userid )
-            self.datatype = 'top_playlists'
-            self.datalist = netease.dig_info(myplaylist, self.datatype)
-            self.title += ' > ' + self.username + ' 的歌单'
+            myplaylist = netease.user_playlist(self.user_id)
+            self.data_type = 'top_playlists'
+            self.data_list = netease.dig_info(myplaylist, self.data_type)
+            self.title += ' > ' + self.user_name + ' 的歌单'
 
         # DJ节目
         elif idx == 5:
-            self.datatype = 'djchannels'
+            self.data_type = 'djchannels'
             self.title += ' > DJ节目'
-            self.datalist = netease.djchannels()
+            self.data_list = netease.djchannels()
 
         # 打碟
         elif idx == 6:
-            self.datatype = 'songs'
+            self.data_type = 'songs'
             self.title += ' > 打碟'
-            self.datalist = self.djstack
+            self.data_list = self.dj_stack
 
         # 收藏
         elif idx == 7:
-            self.datatype = 'songs'
+            self.data_type = 'songs'
             self.title += ' > 收藏'
-            self.datalist = self.collection
+            self.data_list = self.collection
 
         # 搜索
         elif idx == 8:
@@ -416,40 +444,39 @@ class Menu:
 
         # 帮助
         elif idx == 9:
-            self.datatype = 'help'
+            self.data_type = 'help'
             self.title += ' > 帮助'
-            self.datalist = shortcut
+            self.data_list = shortcut
 
-        self.offset = 0
-        self.index = 0 
+        self.page_index = 0
+        self.current_line_index = 0
 
     def search(self):
         ui = self.ui
         x = ui.build_search_menu()
         # if do search, push current info into stack
         if x in range(ord('1'), ord('5')):
-            self.stack.append( [self.datatype, self.title, self.datalist, self.offset, self.index ])
-            self.index = 0
-            self.offset = 0
+            self.stack.append([self.data_type, self.title, self.data_list, self.page_index, self.current_line_index])
+            self.current_line_index = 0
+            self.page_index = 0
 
         if x == ord('1'):
-            self.datatype = 'songs'
-            self.datalist = ui.build_search('songs')
+            self.data_type = 'songs'
+            self.data_list = ui.build_search('songs')
             self.title = '歌曲搜索列表'
 
         elif x == ord('2'):
-            self.datatype = 'artists'
-            self.datalist = ui.build_search('artists')
+            self.data_type = 'artists'
+            self.data_list = ui.build_search('artists')
             self.title = '艺术家搜索列表'
 
         elif x == ord('3'):
-            self.datatype = 'albums'
-            self.datalist = ui.build_search('albums')
+            self.data_type = 'albums'
+            self.data_list = ui.build_search('albums')
             self.title = '专辑搜索列表'
 
         elif x == ord('4'):
             # 搜索结果可以用top_playlists处理
-            self.datatype = 'top_playlists'
-            self.datalist = ui.build_search('search_playlist')
+            self.data_type = 'top_playlists'
+            self.data_list = ui.build_search('search_playlist')
             self.title = '精选歌单搜索列表'
-

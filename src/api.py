@@ -24,6 +24,7 @@ def uniq(arr):
     arr2.sort(key=arr.index)
     return arr2
 
+
 default_timeout = 10
 
 log = logger.getLogger(__name__)
@@ -46,16 +47,16 @@ class NetEase:
         }
         self.playlist_class_dict = {}
 
-    def httpRequest(self, method, action, query=None, urlencoded=None, callback=None, timeout=None):    
+    def httpRequest(self, method, action, query=None, urlencoded=None, callback=None, timeout=None):
         connection = json.loads(self.rawHttpRequest(method, action, query, urlencoded, callback, timeout))
         return connection
 
     def rawHttpRequest(self, method, action, query=None, urlencoded=None, callback=None, timeout=None):
-        if(method == 'GET'):
+        if (method == 'GET'):
             url = action if (query == None) else (action + '?' + query)
             connection = requests.get(url, headers=self.header, timeout=default_timeout)
 
-        elif(method == 'POST'):
+        elif (method == 'POST'):
             connection = requests.post(
                 action,
                 data=query,
@@ -71,7 +72,7 @@ class NetEase:
         action = 'http://music.163.com/api/login/'
         data = {
             'username': username,
-            'password': hashlib.md5( password ).hexdigest(),
+            'password': hashlib.md5(password).hexdigest(),
             'rememberLogin': 'true'
         }
         try:
@@ -81,7 +82,8 @@ class NetEase:
 
     # 用户歌单
     def user_playlist(self, uid, offset=0, limit=100):
-        action = 'http://music.163.com/api/user/playlist/?offset=' + str(offset) + '&limit=' + str(limit) + '&uid=' + str(uid)
+        action = 'http://music.163.com/api/user/playlist/?offset=' + str(offset) + '&limit=' + str(
+            limit) + '&uid=' + str(uid)
         try:
             data = self.httpRequest('GET', action)
             return data['playlist']
@@ -111,7 +113,8 @@ class NetEase:
 
     # 歌单（网友精选碟） hot||new http://music.163.com/#/discover/playlist/
     def top_playlists(self, category='全部', order='hot', offset=0, limit=50):
-        action = 'http://music.163.com/api/playlist/list?cat=' + category + '&order=' + order + '&offset=' + str(offset) + '&total=' + ('true' if offset else 'false') + '&limit=' + str(limit)
+        action = 'http://music.163.com/api/playlist/list?cat=' + category + '&order=' + order + '&offset=' + str(
+            offset) + '&total=' + ('true' if offset else 'false') + '&limit=' + str(limit)
         try:
             data = self.httpRequest('GET', action)
             return data['playlists']
@@ -206,7 +209,8 @@ class NetEase:
 
     # 今日最热（0）, 本周最热（10），历史最热（20），最新节目（30）
     def djchannels(self, stype=0, offset=0, limit=50):
-        action = 'http://music.163.com/discover/djchannel?type=' + str(stype) + '&offset=' + str(offset) + '&limit=' + str(limit)
+        action = 'http://music.163.com/discover/djchannel?type=' + str(stype) + '&offset=' + str(
+            offset) + '&limit=' + str(limit)
         try:
             connection = requests.get(action, headers=self.header, timeout=default_timeout)
             connection.encoding = 'UTF-8'
@@ -224,30 +228,30 @@ class NetEase:
             action = 'http://music.163.com/api/dj/program/detail?id=' + str(channelids[i])
             try:
                 data = self.httpRequest('GET', action)
-                channel = self.dig_info( data['program']['mainSong'], 'channels' )
+                channel = self.dig_info(data['program']['mainSong'], 'channels')
                 channels.append(channel)
             except:
                 continue
 
         return channels
 
-    def dig_info(self, data ,dig_type):
+    def dig_info(self, data, dig_type):
         temp = []
         if dig_type == 'songs':
-            for i in range(0, len(data) ):
+            for i in range(0, len(data)):
                 song_info = {
                     'song_id': data[i]['id'],
                     'artist': [],
                     'song_name': data[i]['name'],
                     'album_name': data[i]['album']['name'],
-                    'mp3_url': data[i]['mp3Url']   
+                    'mp3_url': data[i]['mp3Url']
                 }
                 if 'artist' in data[i]:
                     song_info['artist'] = data[i]['artist']
                 elif 'artists' in data[i]:
-                    for j in range(0, len(data[i]['artists']) ):
-                        song_info['artist'].append( data[i]['artists'][j]['name'] )
-                    song_info['artist'] = ', '.join( song_info['artist'] )
+                    for j in range(0, len(data[i]['artists'])):
+                        song_info['artist'].append(data[i]['artists'][j]['name'])
+                    song_info['artist'] = ', '.join(song_info['artist'])
                 else:
                     song_info['artist'] = '未知艺术家'
 
@@ -255,7 +259,7 @@ class NetEase:
 
         elif dig_type == 'artists':
             temp = []
-            for i in range(0, len(data) ):
+            for i in range(0, len(data)):
                 artists_info = {
                     'artist_id': data[i]['id'],
                     'artists_name': data[i]['name'],
@@ -266,7 +270,7 @@ class NetEase:
             return temp
 
         elif dig_type == 'albums':
-            for i in range(0, len(data) ):
+            for i in range(0, len(data)):
                 albums_info = {
                     'album_id': data[i]['id'],
                     'albums_name': data[i]['name'],
@@ -275,13 +279,13 @@ class NetEase:
                 temp.append(albums_info)
 
         elif dig_type == 'top_playlists':
-            for i in range(0, len(data) ):
+            for i in range(0, len(data)):
                 playlists_info = {
                     'playlist_id': data[i]['id'],
                     'playlists_name': data[i]['name'],
                     'creator_name': data[i]['creator']['nickname']
                 }
-                temp.append(playlists_info)        
+                temp.append(playlists_info)
 
 
         elif dig_type == 'channels':
@@ -291,8 +295,8 @@ class NetEase:
                 'artist': data['artists'][0]['name'],
                 'album_name': 'DJ节目',
                 'mp3_url': data['mp3Url']
-                }
-            temp = channel_info    
+            }
+            temp = channel_info
 
         elif dig_type == 'playlist_classes':
             soup = BeautifulSoup(data)
