@@ -1,6 +1,6 @@
 NetEase-MusicBox
 =================
-New Feature 2014.11.22
+### New Feature 2014.11.22
 =================
 1. 输入密码时隐藏字符 Hide the password when typing
 2. 添加了播放模式，普通，随机，单曲循环 Add three play mode, "normal", "random", "single song loop"
