@@ -1,5 +1,9 @@
 NetEase-MusicBox
 =================
+New Feature 2014.11.22
+1. 输入密码时隐藏字符 Hide the password when typing
+2. 添加了播放模式，普通，随机，单曲循环 Add three play mode, "normal", "random", "single song loop"
+3. 添加上下左右键，PageDn，PageUp键操作
 Thanks vellow
 
 原作者vellow已不再开发，后续版本欢迎大家共同开发。
